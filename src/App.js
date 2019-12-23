@@ -33,7 +33,8 @@ function App() {
   return (
     <div className="App">
       <div style={{ background: 'tomato', width: x, height: 10 }}></div>
-      <span>counter: {value}</span>
+      <span>counter: {value.counter}</span>
+      <pre>{JSON.stringify(value)}</pre>
       <button onClick={incrementCounter}>count</button>
       <button onClick={startActivate}>Start</button>
       <button onClick={stopActivate}>Stop</button>

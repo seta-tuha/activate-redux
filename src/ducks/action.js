@@ -19,6 +19,9 @@ export const VERIFY_SPEECH_SUCCESS = 'VERIFY_SPEECH_SUCCESS';
 export const START_VERIFYING = 'START_VERIFYING';
 export const VERIFYING = 'VERIFYING_REQUEST';
 export const FINISH_VERIFYING = 'FINISH_VERIFYING';
+export const RECORDED = 'RECORDED';
+export const START_RECORDER = 'START_RECORDER';
+export const STOP_RECORDER = 'STOP_RECORDER';
 
 export const increment = () => ({
   type: INCREMENT,
@@ -70,4 +73,17 @@ export const startVerifying = () => ({
 
 export const finishVerifying = () => ({
   type: FINISH_VERIFYING,
+})
+
+export const recorded = (data) => ({
+  type: RECORDED,
+  payload: data
+})
+
+export const startRecorder = () => ({
+  type: START_RECORDER
+})
+
+export const stopRecorder = () => ({
+  type: STOP_RECORDER
 })

@@ -1,9 +1,18 @@
-import { INCREMENT } from "./action";
+import { INCREMENT, RECORDED } from "./action";
 
-export default function mainReducer(state = 0, action) {
+export default function mainReducer(state = { counter: 0 }, action) {
   switch (action.type) {
     case INCREMENT:
-      return state + 1;
+      return {
+        ...state,
+        counter: state.counter + 1
+      }
+    case RECORDED:
+      return {
+        ...state,
+        blob: action.payload.blob,
+        recording: action.payload.recording
+      }
     default:
       return state;
   }

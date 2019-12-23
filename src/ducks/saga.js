@@ -14,6 +14,7 @@ import {
   INCREMENT_ASYNC,
   ACTIVATE_STOP,
   ACTIVATE_START,
+  START_RECORDER,
   START_RECORDING,
   STOP_RECORDING,
   SET_EMAIL,
@@ -26,7 +27,9 @@ import {
   stopRecording,
   VERIFYING,
   startVerifying,
-  finishVerifying
+  finishVerifying,
+  recorded,
+  STOP_RECORDER
 } from './action';
 
 const counterSelector = state => state;
@@ -92,7 +95,8 @@ export function* activateFlow() {
     yield call(activate.start);
     yield fork(activateEvent, activateChannel);
     yield take(ACTIVATE_STOP);
-    activate.stop()
+    activate.stop();
+    activateChannel.close();
   }
 }
 
@@ -160,23 +164,62 @@ export function* verifyAudio(email) {
 }
 
 export function* recorder() {
-  const mediaStream = yield call(navigator.mediaDevices.getUserMedia, { audio: true });
-  const audioRecorder = new window.MediaRecorder(mediaStream);
-  // const audioChannel =
-  let chunks = [];
-  let blob = null;
-  audioRecorder.onstart = () => {
-  };
+  let audioRecorder, mediaStreamRef;
+  let animationFrameRef, source, analyser;
+  const audioChannel = eventChannel(emitter => {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(mediaStream => {
+        mediaStreamRef = mediaStream;
+        audioRecorder = new window.MediaRecorder(mediaStream);
 
-  audioRecorder.onstop = () => {
-    blob = new Blob(chunks, { type: "audio/webm; codecs=opus" });
-    chunks = [];
-  };
+        const audioContext = new (window.AudioContext ||
+          window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 512;
+        let dataArray = new Uint8Array(analyser.frequencyBinCount);
+        source = audioContext.createMediaStreamSource(mediaStreamRef);
+        source.connect(analyser);
 
-  audioRecorder.ondataavailable = e => {
-    chunks.push(e.data);
-  };
+        const tick = () => {
+          analyser.getByteFrequencyData(dataArray);
+          emitter({ ticks: dataArray });
+          animationFrameRef = requestAnimationFrame(tick);
+        };
+        animationFrameRef = requestAnimationFrame(tick);
+
+        emitter({ available: true });
+
+        let chunks = [];
+        let blob = null;
+
+        audioRecorder.onstart = () => {
+          emitter({ recording: false });
+        };
+
+        audioRecorder.onstop = () => {
+          blob = new Blob(chunks, { type: "audio/webm; codecs=opus" });
+          emitter({ recording: true, blob });
+          chunks = [];
+        };
+
+        audioRecorder.ondataavailable = e => {
+          chunks.push(e.data);
+        };
+      })
+      .catch(() => {
+        emitter({ available: false });
+      });
+    return () => {
+      mediaStreamRef && mediaStreamRef.getTracks().forEach(function (track) {
+        track.stop();
+      });
+      cancelAnimationFrame(animationFrameRef);
+      analyser && analyser.disconnect();
+      source && source.disconnect();
+    }
+  });
   while (true) {
+    yield fork(audioEvent, audioChannel);
     yield take(START_RECORDING);
     audioRecorder.start();
     yield take(STOP_RECORDING);
@@ -184,10 +227,40 @@ export function* recorder() {
   }
 }
 
+export function* audioEvent(chan) {
+  yield takeEvery(STOP_RECORDER, function* stopChannel() {
+    yield chan.close();
+  });
+  try {
+    while (true) {
+      const { recording, blob, available, ticks } = yield take(chan);
+      if (recording) {
+        yield put(recorded({ recording, blob }));
+      }
+      if (available) {
+        yield put(startRecording());
+      }
+      if (ticks) {
+        // yield put(vocalTicks(ticks));
+
+      }
+    }
+  } finally {
+    if (yield cancelled()) {
+      chan.close()
+    }
+  }
+}
+
+export function* startRecorder() {
+  yield takeLatest(START_RECORDER, recorder);
+}
+
 export default function* rootSaga() {
   yield all([
     watchIncrementAsync(),
     activateFlow(),
     verifyFlow(),
+    startRecorder()
   ])
 }
